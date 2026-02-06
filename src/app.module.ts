@@ -13,8 +13,9 @@ import { ClientModule } from './client/client.module';
       useFactory: (configService: ConfigService) => ({
         type: 'postgres',
         url: configService.get('DATABASE_URL'),
-        entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: true,
+        autoLoadEntities: true,
+        synchronize: true, // Set to false in a real production app with migrations
+        ssl: configService.get('DATABASE_URL')?.includes('localhost') ? false : { rejectUnauthorized: false },
       }),
       inject: [ConfigService],
     }),
