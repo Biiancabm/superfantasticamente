@@ -10,13 +10,16 @@ import { ClientModule } from './client/client.module';
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        url: process.env.DATABASE_URL,
-        autoLoadEntities: true,
-        synchronize: true, // Set to false in a real production app with migrations
-        ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false },
-      }),
+      useFactory: (configService: ConfigService) => {
+        const databaseUrl = configService.get<string>('DATABASE_URL');
+        return {
+          type: 'postgres',
+          url: databaseUrl,
+          autoLoadEntities: true,
+          synchronize: true, // Set to false in a real production app with migrations
+          ssl: databaseUrl?.includes('localhost') ? false : { rejectUnauthorized: false },
+        };
+      },
       inject: [ConfigService],
     }),
     ClientModule,
