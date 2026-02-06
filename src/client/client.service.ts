@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -9,7 +9,7 @@ import { UpdateClientDto } from './dto/update-client.dto';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 @Injectable()
-export class ClientService {
+export class ClientService implements OnModuleInit {
   private genAI: GoogleGenerativeAI;
 
   constructor(
@@ -24,6 +24,16 @@ export class ClientService {
       this.genAI = new GoogleGenerativeAI(apiKey);
     }
   }
+
+  async onModuleInit() {
+    try {
+      await this.clientRepository.query('CREATE EXTENSION IF NOT EXISTS vector;');
+      console.log('PostgreSQL vector extension enabled (or already exists).');
+    } catch (error) {
+      console.error('Failed to enable PostgreSQL vector extension:', error);
+    }
+  }
+
 
   async create(createClientDto: CreateClientDto) {
     const existing = await this.clientRepository.findOne({
