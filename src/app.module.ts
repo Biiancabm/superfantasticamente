@@ -12,10 +12,10 @@ import { ClientModule } from './client/client.module';
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         type: 'postgres',
-        url: configService.get('DATABASE_URL'),
+        url: process.env.DATABASE_URL,
         autoLoadEntities: true,
         synchronize: true, // Set to false in a real production app with migrations
-        ssl: configService.get('DATABASE_URL')?.includes('localhost') ? false : { rejectUnauthorized: false },
+        ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false },
       }),
       inject: [ConfigService],
     }),
