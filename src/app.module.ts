@@ -12,12 +12,27 @@ import { ClientModule } from './client/client.module';
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
         const databaseUrl = configService.get<string>('DATABASE_URL');
+        
+        // Debugging (helps identify if Railway variables are being picked up)
+        if (databaseUrl) {
+          const host = databaseUrl.split('@')[1]?.split(':')[0] || 'unknown';
+          console.log(`Attempting to connect to database host: ${host}`);
+        } else {
+          console.error('DATABASE_URL is not defined!');
+        }
+
         return {
           type: 'postgres',
           url: databaseUrl,
           autoLoadEntities: true,
-          synchronize: true, // Set to false in a real production app with migrations
-          ssl: databaseUrl?.includes('localhost') ? false : { rejectUnauthorized: false },
+          synchronize: true,
+          // Mandatory SSL for most cloud providers (like Railway/Render)
+          // We only disable it if we explicitly detect localhost
+          ssl: databaseUrl?.includes('localhost') || !databaseUrl ? false : { rejectUnauthorized: false },
+          // Add extra connection options for stability in cloud
+          extra: {
+            connectionTimeoutMillis: 10000,
+          }
         };
       },
       inject: [ConfigService],
