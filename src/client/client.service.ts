@@ -87,149 +87,174 @@ export class ClientService implements OnModuleInit {
     return result.embedding.values;
   }
 
+  private prepareClientText(client: Client): string {
+    return `Client: ${client.name}, Code: ${client.code}, Email: ${client.email}, Phone: ${client.phone}, CPF: ${client.cpf}`;
+  }
+
   async createEmbeddingForClient(code: string) {
     const client = await this.findOne(code);
     
-    console.log(client);
-
-    const vector = await this.generateEmbedding(client.name);
+    const textToEmbed = this.prepareClientText(client);
+    const vector = await this.generateEmbedding(textToEmbed);
   
-    const embeddingString = JSON.stringify(vector);
-
+    const vectorString = `[${vector.join(',')}]`;
 
     let embedding = client.embedding;
     if (!embedding) {
       embedding = this.clientEmbeddingRepository.create({
         client: client,
-        embedding: embeddingString,
+        embedding: vectorString,
       });
     } else {
-      embedding.embedding = embeddingString;
+      embedding.embedding = vectorString;
     }
-    console.log(embedding);
+    
     return this.clientEmbeddingRepository.save(embedding);
   }
 
 
-  private cosineSimilarity(vecA: number[], vecB: number[]): number {
-    if (vecA.length !== vecB.length) {
-      console.error(`Vector length mismatch: Search vector (${vecA.length}) vs Database vector (${vecB.length})`);
-      throw new Error(`Vectors must have the same length: ${vecA.length} vs ${vecB.length}`);
+  async createAllEmbeddings() {
+    const clients = await this.clientRepository.find();
+    for (const client of clients) {
+      if (!client.embedding) {
+        await this.createEmbeddingForClient(client.code);
+      } else {
+        console.log(`Client ${client.name} already has an embedding`);
+      }
     }
-
-    let dotProduct = 0;
-    let normA = 0;
-    let normB = 0;
-
-    for (let i = 0; i < vecA.length; i++) {
-      dotProduct += vecA[i] * vecB[i];
-      normA += vecA[i] * vecA[i];
-      normB += vecB[i] * vecB[i];
-    }
-
-    const denominator = Math.sqrt(normA) * Math.sqrt(normB);
-    if (denominator === 0) {
-      return 0;
-    }
-
-    return dotProduct / denominator;
   }
+  // private cosineSimilarity(vecA: number[], vecB: number[]): number {
+  //   if (vecA.length !== vecB.length) {
+  //     console.error(`Vector length mismatch: Search vector (${vecA.length}) vs Database vector (${vecB.length})`);
+  //     throw new Error(`Vectors must have the same length: ${vecA.length} vs ${vecB.length}`);
+  //   }
+
+  //   let dotProduct = 0;
+  //   let normA = 0;
+  //   let normB = 0;
+
+  //   for (let i = 0; i < vecA.length; i++) {
+  //     dotProduct += vecA[i] * vecB[i];
+  //     normA += vecA[i] * vecA[i];
+  //     normB += vecB[i] * vecB[i];
+  //   }
+
+  //   const denominator = Math.sqrt(normA) * Math.sqrt(normB);
+  //   if (denominator === 0) {
+  //     return 0;
+  //   }
+
+  //   return dotProduct / denominator;
+  // }
 
   async findSimilar(search: string) {
-   const embedding = await this.generateEmbedding(search);
-   const vectorString = `[${embedding.join(',')}]`;
+    const embedding = await this.generateEmbedding(search);
+    const vectorString = `[${embedding.join(',')}]`;
 
-const clientes = await this.clientRepository.query(
-  `
-  SELECT c.code,
-         1 - (e.embedding <=> $1::vector) AS similarity
-  FROM client c
-  JOIN client_embedding e ON e."clientCode" = c.code
-  WHERE 1 - (e.embedding <=> $1::vector) > 0.7
-  ORDER BY e.embedding <=> $1::vector
-  LIMIT 1;
-  `,
-  [vectorString],
-);
+    const rawResults = await this.clientRepository.query(
+      `
+      SELECT c.code,
+             1 - (e.embedding <=> $1::vector) AS similarity
+      FROM client c
+      JOIN client_embedding e ON e."clientCode" = c.code
+      WHERE 1 - (e.embedding <=> $1::vector) > 0.5
+      ORDER BY e.embedding <=> $1::vector
+      LIMIT 10;
+      `,
+      [vectorString],
+    );
 
-if (!clientes || clientes.length === 0) {
-  throw new NotFoundException('No similar clients found');
-}
-const result = await this.clientRepository.find({ where: { code: clientes[0].code } });
-return clientes;
+    if (!rawResults || rawResults.length === 0) {
+      throw new NotFoundException('No similar clients found');
+    }
+
+    const clients = await Promise.all(
+      rawResults.map(async (res: { code: string; similarity: string }) => {
+        const client = await this.clientRepository.findOne({ 
+          where: { code: res.code },
+          relations: ['embedding']
+        });
+        return {
+          ...client,
+          similarity: parseFloat(res.similarity),
+        };
+      })
+    );
+
+    return clients;
   }
 
  
-  async findSimilarClient(searchText: string) {
-    try {
-      const searchEmbedding = await this.generateEmbedding(searchText);
-      const clients = await this.clientRepository.find({ 
-        relations: ['embedding'] 
-      });
-      console.log('Total clients found:', clients.length);
+  // async findSimilarClient(searchText: string) {
+  //   try {
+  //     const searchEmbedding = await this.generateEmbedding(searchText);
+  //     const clients = await this.clientRepository.find({ 
+  //       relations: ['embedding'] 
+  //     });
+  //     console.log('Total clients found:', clients.length);
 
-      if (clients.length === 0) {
-        throw new NotFoundException('No clients found in database');
-      }
+  //     if (clients.length === 0) {
+  //       throw new NotFoundException('No clients found in database');
+  //     }
 
-      const clientsWithEmbeddings = clients.filter(client => client.embedding?.embedding);
+  //     const clientsWithEmbeddings = clients.filter(client => client.embedding?.embedding);
 
-      if (clientsWithEmbeddings.length === 0) {
-        throw new NotFoundException('No clients with embeddings found');
-      }
+  //     if (clientsWithEmbeddings.length === 0) {
+  //       throw new NotFoundException('No clients with embeddings found');
+  //     }
 
-      const similarities = clientsWithEmbeddings.map(client => {
-        try {
-          let clientEmbedding: number[];
+  //     const similarities = clientsWithEmbeddings.map(client => {
+  //       try {
+  //         let clientEmbedding: number[];
           
-          if (typeof client.embedding.embedding === 'string') {
-            clientEmbedding = JSON.parse(client.embedding.embedding);
-          } else if (Array.isArray(client.embedding.embedding)) {
-            clientEmbedding = client.embedding.embedding;
-          } else {
-            console.error('Invalid embedding format for client:', client.code);
-            return null;
-          }
-          console.log(clientEmbedding);
+  //         if (typeof client.embedding.embedding === 'string') {
+  //           clientEmbedding = JSON.parse(client.embedding.embedding);
+  //         } else if (Array.isArray(client.embedding.embedding)) {
+  //           clientEmbedding = client.embedding.embedding;
+  //         } else {
+  //           console.error('Invalid embedding format for client:', client.code);
+  //           return null;
+  //         }
+  //         console.log(clientEmbedding);
 
-          const similarity = this.cosineSimilarity(searchEmbedding, clientEmbedding);
-          console.log(`Client ${client.name} similarity:`, similarity);
+  //         const similarity = this.cosineSimilarity(searchEmbedding, clientEmbedding);
+  //         console.log(`Client ${client.name} similarity:`, similarity);
           
-          return {
-            client,
-            similarity,
-          };
-        } catch (error) {
-          console.error(`Error processing client ${client.code}:`, error.message);
-          return null;
-        }
-      }).filter(result => result !== null);
+  //         return {
+  //           client,
+  //           similarity,
+  //         };
+  //       } catch (error) {
+  //         console.error(`Error processing client ${client.code}:`, error.message);
+  //         return null;
+  //       }
+  //     }).filter(result => result !== null);
 
-      if (similarities.length === 0) {
-        throw new NotFoundException('No valid embeddings could be processed');
-      }
+  //     if (similarities.length === 0) {
+  //       throw new NotFoundException('No valid embeddings could be processed');
+  //     }
 
-      similarities.sort((a, b) => b.similarity - a.similarity);
+  //     similarities.sort((a, b) => b.similarity - a.similarity);
 
-      const bestMatch = similarities[0];
-      if (bestMatch.similarity < 0.7) {
-        console.log(bestMatch.similarity);
-        throw new NotFoundException('No similar clients found');
-      }
-      return {
-        code: bestMatch.client.code,
-        name: bestMatch.client.name,
-        similarity: bestMatch.similarity,
-        searchText,
-        allMatches: similarities.map(s => ({
-          code: s.client.code,
-          name: s.client.name,
-          similarity: s.similarity,
-        })),
-      };
-    } catch (error) {
-      console.error('Error in findSimilarClient:', error);
-      throw error;
-    }
-  }
+  //     const bestMatch = similarities[0];
+  //     if (bestMatch.similarity < 0.7) {
+  //       console.log(bestMatch.similarity);
+  //       throw new NotFoundException('No similar clients found');
+  //     }
+  //     return {
+  //       code: bestMatch.client.code,
+  //       name: bestMatch.client.name,
+  //       similarity: bestMatch.similarity,
+  //       searchText,
+  //       allMatches: similarities.map(s => ({
+  //         code: s.client.code,
+  //         name: s.client.name,
+  //         similarity: s.similarity,
+  //       })),
+  //     };
+  //   } catch (error) {
+  //     console.error('Error in findSimilarClient:', error);
+  //     throw error;
+  //   }
+  // }
 }

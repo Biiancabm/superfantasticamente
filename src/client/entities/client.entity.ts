@@ -9,6 +9,15 @@ export class Client {
   @Column()
   name: string;
 
+  @Column()
+  email: string;
+
+  @Column()
+  phone: string;
+
+  @Column()
+  cpf: string;
+
   @OneToOne(() => ClientEmbedding, (embedding) => embedding.client)
   embedding: ClientEmbedding;
 }

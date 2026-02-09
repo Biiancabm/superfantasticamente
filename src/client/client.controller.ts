@@ -37,19 +37,26 @@ export class ClientController {
     return this.clientService.createEmbeddingForClient(code);
   } 
 
+  @Post('all/embeddings')
+  createAllEmbeddings() {
+    return this.clientService.createAllEmbeddings();
+  }
+
   // @Get(':name/embedding')
   // findOneEmbedding(@Param('name') name: string) {
   //   console.log(name);
   //   return this.clientService.findOneEmbedding(name);
   // }
 
-  @Get('search/:name')
-  searchSimilar(@Param('name') name: string) {
-    return this.clientService.findSimilarClient(name);
-  }
+  // @Get('search/:name')
+  // searchSimilar(@Param('name') name: string) {
+  //   return this.clientService.findSimilarClient(name);
+  // }
 
   @Get('fodastico/:name')
   searchFodastico(@Param('name') name: string) {
     return this.clientService.findSimilar(name);
   }
 }
+
+
