@@ -44,7 +44,16 @@ export class ClientService implements OnModuleInit {
     }
 
     const client = this.clientRepository.create(createClientDto);
-    return this.clientRepository.save(client);
+    const savedClient = await this.clientRepository.save(client);
+    
+    try {
+      await this.createEmbeddingForClient(savedClient.code);
+    } catch (error) {
+      console.error(`Failed to create initial embedding for client ${savedClient.code}:`, error.message);
+      // We don't throw here to avoid failing the whole creation if embedding fails
+    }
+    
+    return savedClient;
   }
 
   async findAll() {
@@ -67,6 +76,14 @@ export class ClientService implements OnModuleInit {
     if (result.affected === 0) {
       throw new NotFoundException(`Client with code ${code} not found`);
     }
+    
+    try {
+      await this.createEmbeddingForClient(code);
+    } catch (error) {
+      console.error(`Failed to update embedding for client ${code}:`, error.message);
+      // We don't throw here to avoid failing the update if embedding fails
+    }
+    
     return this.findOne(code);
   }
 
