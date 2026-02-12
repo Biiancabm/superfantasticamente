@@ -17,7 +17,7 @@ Front-end React moderno para gerenciar clientes do backend NestJS.
 ## 📋 Pré-requisitos
 
 - Node.js 20.19+ ou 22.12+ (recomendado)
-- Backend NestJS rodando em `http://localhost:3000`
+
 
 ## 🛠️ Instalação
 
